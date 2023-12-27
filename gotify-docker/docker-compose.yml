@@ -1,0 +1,13 @@
+version: "3"
+
+services:
+  gotify:
+    image: gotify/server
+    ports:
+      - 8080:81
+    environment:
+      - GOTIFY_DEFAULTUSER_PASS=custom
+    volumes:
+      - "./gotify_data:/app/data"
+    env_file:
+      - .env
