@@ -1,4 +1,11 @@
-# hardware components
+# hardware components (v2)
+- arduino d1 mini (node mcu) (1x https://amzn.eu/d/cdpDF5X, 6,99€)
+- accelerator sensor (Adafruit_ADXL345) (1x https://amzn.eu/d/e4jykyL, 6,99€)
+- slide switch (1x https://amzn.eu/d/afPODNF, 7,98€)
+- 4x 3,7V 2000mAh lithium battery 1S 1C LiPo (1x https://www.amazon.de/dp/B08TQSC5G9, 28,99€)
+- battery shield for d1 mini (1x [https://www.az-delivery.de](https://www.az-delivery.de/products/batterie-shield-fuer-lithium-batterien-fuer-d1-mini?variant=20290872541280) 4,99 €)
+
+# hardware components (v1)
 - arduino d1 mini (node mcu) (1x https://amzn.eu/d/cdpDF5X, 6,99€)
 - accelerator sensor (Adafruit_ADXL345) (1x https://amzn.eu/d/e4jykyL, 6,99€)
 - blue 5mm led (1x https://amzn.eu/d/cWSqcIC, 8,99€)
