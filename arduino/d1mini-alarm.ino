@@ -1,243 +1,369 @@
-#include <Wire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_ADXL345_U.h>
+/*  ********************************************* 
+ *  Birth alarm
+ *  Utilizing Sparkfun's ADXL345 Library
+ *  
+ *  Development Environment Specifics:
+ *  Arduino 2.2.1
+ *  esp bordmanager version 2.4.2
+ *  
+ *  Hardware Specifications:
+ *  SparkFun ADXL345 on ESP8266 D1 Mini
+ * 
+ * ADXL345 INT1 on PIN D5 / 15
+ *         VNC on 5V
+ *         SDA on D2
+ *         SCL on D1
+ *         GND on GND
+ *  *********************************************/
+
+#include <FS.h>
 #include <ESP8266WiFi.h>
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>          // https://github.com/tzapu/WiFiManager
+#include <ArduinoJson.h>          // https://github.com/bblanchon/ArduinoJson // install v5.0.8
+
+#include <SparkFun_ADXL345.h>     // SparkFun ADXL345 Library
 #include <ESP8266HTTPClient.h>
-#include <WiFiClientSecure.h>
 
-// Assign a unique ID to this sensor at the same time
-Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
+#include "user_interface.h"       // include required for LIGHT_SLEEP_T
 
+/**
+ * debug defnitions
+ */
+#define DEBUG 1
+#if DEBUG == 1
+  #define debug(x) Serial.print(x);
+  #define debugln(x) Serial.println(x);
+#else
+  #define debug(x)
+  #define debugln(x)
+#endif
 
-const char* ssid = "YOUR ROUTER SSID";
-const char* password = "YOUR-WLAN-PASSWORD";
-const char* gotifyAppToken = "YOUR APP TOKEN FROM GOTIFY"
+ADXL345 adxl = ADXL345();             // use adxl with i2c
 
-//Your Domain name with URL path or IP address with path
-String serverName = "http://your-gotify-host.com/message";
+int interruptPin = D5;                // Setup pin 2 to be the interrupt pin (d0 for most esp Boards)
+int actInt = 0;
+int inactive = 1;
+int batteryPin = A0;
+float lowVoltageThreshold = 3.73;     // est. 20% remaining battery cap.
 
-// the following variables are unsigned longs because the time, measured in
-// milliseconds, will quickly become a bigger number than can be stored in an int.
+String serverName = "https://push.birth-alarm.com/message";
+
+// Set web server port number to 80
+WiFiServer server(80);
+//flag for saving data
+bool shouldSaveConfig = false;
+// Auxiliar variables to store the current output state
+String outputState = "off";
+// Assign output variables to GPIO pins
+char output[2] = "5";
+char pushToken[20];
+char horseName[40];
+// Variable to store the HTTP request
+String header;
+
+// milliseconds, to pause between push calls
 unsigned long lastTime = 0;
-// Timer set to 10 minutes (600000)
-//unsigned long timerDelay = 600000;
-// Set timer to 5 seconds (5000)
-unsigned long timerDelay = 5000;
+unsigned long timerDelay = 2500;
 
+int messageSent = 0;
 
-void displaySensorDetails(void)
-{
-  sensor_t sensor;
-  accel.getSensor(&sensor);
-  Serial.println("------------------------------------");
-  Serial.print ("Sensor: "); Serial.println(sensor.name);
-  Serial.print ("Driver Ver: "); Serial.println(sensor.version);
-  Serial.print ("Unique ID: "); Serial.println(sensor.sensor_id);
-  Serial.print ("Max Value: "); Serial.print(sensor.max_value); Serial.println(" m/s^2");
-  Serial.print ("Min Value: "); Serial.print(sensor.min_value); Serial.println(" m/s^2");
-  Serial.print ("Resolution: "); Serial.print(sensor.resolution); Serial.println(" m/s^2"); 
-  Serial.println("------------------------------------");
-  Serial.println("");
-  delay(500);
-}
+void ADXL_ISR();
 
-void displayDataRate(void)
-{
-  Serial.print ("Data Rate: "); 
-
-  switch(accel.getDataRate())
-  {
-    case ADXL345_DATARATE_3200_HZ:
-      Serial.print ("3200 "); 
-      break;
-    case ADXL345_DATARATE_1600_HZ:
-      Serial.print ("1600 "); 
-      break;
-    case ADXL345_DATARATE_800_HZ:
-      Serial.print ("800 "); 
-      break;
-    case ADXL345_DATARATE_400_HZ:
-      Serial.print ("400 "); 
-      break;
-    case ADXL345_DATARATE_200_HZ:
-      Serial.print ("200 "); 
-      break;
-    case ADXL345_DATARATE_100_HZ:
-      Serial.print ("100 "); 
-      break;
-    case ADXL345_DATARATE_50_HZ:
-      Serial.print ("50 "); 
-      break;
-    case ADXL345_DATARATE_25_HZ:
-      Serial.print ("25 "); 
-      break;
-    case ADXL345_DATARATE_12_5_HZ:
-      Serial.print ("12.5 "); 
-      break;
-    case ADXL345_DATARATE_6_25HZ:
-      Serial.print ("6.25 "); 
-      break;
-    case ADXL345_DATARATE_3_13_HZ:
-      Serial.print ("3.13 "); 
-      break;
-    case ADXL345_DATARATE_1_56_HZ:
-      Serial.print ("1.56 "); 
-      break;
-    case ADXL345_DATARATE_0_78_HZ:
-      Serial.print ("0.78 "); 
-      break;
-    case ADXL345_DATARATE_0_39_HZ:
-      Serial.print ("0.39 "); 
-      break;
-    case ADXL345_DATARATE_0_20_HZ:
-      Serial.print ("0.20 "); 
-      break;
-    case ADXL345_DATARATE_0_10_HZ:
-      Serial.print ("0.10 "); 
-      break;
-    default:
-      Serial.print ("???? "); 
-      break;
-  } 
-  Serial.println(" Hz"); 
-}
-
-void displayRange(void)
-{
-  Serial.print ("Range: +/- "); 
-
-  switch(accel.getRange())
-  {
-    case ADXL345_RANGE_16_G:
-      Serial.print ("16 "); 
-      break;
-    case ADXL345_RANGE_8_G:
-      Serial.print ("8 "); 
-      break;
-    case ADXL345_RANGE_4_G:
-      Serial.print ("4 "); 
-      break;
-    case ADXL345_RANGE_2_G:
-      Serial.print ("2 "); 
-      break;
-    default:
-      Serial.print ("?? "); 
-      break;
-  } 
-  Serial.println(" g"); 
-}
-
-int WLANLED = 15;
-int ALARMLED = 13;
-
-void setup(void) 
-{
-  
-  pinMode(WLANLED, OUTPUT);
-  pinMode(ALARMLED, OUTPUT);
-  digitalWrite(WLANLED, LOW);
-  digitalWrite(ALARMLED, LOW);
-
-
- Serial.begin(9600);
- 
-  WiFi.begin(ssid, password);
-  Serial.println("Connecting");
+/**
+ * builds wifi connection
+ */
+void connectToWifi() {
+  debugln("Connecting");
   while(WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    debug(".");
   }
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
-
-  digitalWrite(WLANLED, HIGH);
-
-  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
-
-  
-  Serial.println("Accelerometer Test"); Serial.println("");
- 
-  /// Initialise the sensor
-  if(!accel.begin())
-  {
-    // There was a problem detecting the ADXL345 ... check your connections
-    Serial.println("Ooops, no ADXL345 detected ... Check your wiring!");
-    while(1);
-  }
-
-  /* Set the range to whatever is appropriate for your project */
-  accel.setRange(ADXL345_RANGE_16_G);
-  // displaySetRange(ADXL345_RANGE_8_G);
-  // displaySetRange(ADXL345_RANGE_4_G);
-  // displaySetRange(ADXL345_RANGE_2_G);
-
-  // Display some basic information on this sensor
-  displaySensorDetails();
-
-  /* Display additional settings (outside the scope of sensor_t) */
-  displayDataRate();
-  displayRange();
-  Serial.println("");
+  debugln("");
+  debug("Connected to WiFi network with IP Address: ");
+  debugln(WiFi.localIP());
 }
 
-void loop(void) 
-{
-  /* Get a new sensor event */ 
-  sensors_event_t event; 
-  accel.getEvent(&event);
-
-  // Send an HTTP POST request depending on timerDelay
+/**
+ * to be calledin loop
+ */
+void sendAlarm(String alarmType) {
   if ((millis() - lastTime) > timerDelay) {
     //Check WiFi connection status
     if(WiFi.status()== WL_CONNECTED){
-      if(event.acceleration.x < -5 || event.acceleration.x > 5) {
-        digitalWrite(ALARMLED, HIGH);
-        WiFiClientSecure client;
-        HTTPClient http;
+      WiFiClientSecure client;
+      HTTPClient http;
 
-        // this should later be replaced with te root certificate of your host
-        client.setInsecure();
+      client.setInsecure();
 
-        String serverPath = serverName + "?token=" + gotifyAppToken + "&";
-        
-        // Your Domain name with URL path or IP address with path
-        http.begin(client, serverPath);
-        // Specify content-type header
-        http.addHeader("Content-Type", "application/x-www-form-urlencoded", false, true);
-        // Data to send with HTTP POST
-        String httpRequestData = "title=Birth Alarm&message=Check your horse&";
-        // Send HTTP POST request
-        Serial.print(serverPath);
-        int httpResponseCode = http.POST(httpRequestData);
-        Serial.print(httpRequestData);
-        if (httpResponseCode > 0) {
-          Serial.print("HTTP Response code: ");
-          Serial.println(httpResponseCode);
-          String payload = http.getString();
-          Serial.println(payload);
-        }
-        else {
-          Serial.print("Error code: ");
-          Serial.println(httpResponseCode);
-        }
-        // Free resources
-        http.end();
-      } else {
-        digitalWrite(ALARMLED, LOW);
-      }
-    }
-    else {
-      Serial.println("WiFi Disconnected");
+      String serverPath = serverName + "?token=" + pushToken + "&";
       
-      digitalWrite(WLANLED, LOW);
+      // Your Domain name with URL path or IP address with path
+      http.begin(client, serverPath);
+      // Specify content-type header
+      http.addHeader("Content-Type", "application/x-www-form-urlencoded", false, true);
+      // Data to send with HTTP POST
+      String httpRequestData = "Error";
+      debugln(alarmType);
+      if(alarmType == "birthalarm") {
+        String horseNameS = "";
+        horseNameS.concat(horseName);
+        String titleMessageParams = "title=Geburt-Alarm!&message=";
+        httpRequestData = titleMessageParams + horseNameS + " hat sich hin gelegt!&priority=10&";
+      }
+      if(alarmType == "lowbattery") {
+        String horseNameS = "";
+        horseNameS.concat(horseName);
+        String titleMessageParams = "title=Niedriger Akkustand!&message=";
+        httpRequestData = titleMessageParams + "Bitte lade den Akku für " + horseNameS + " Geburtenmelder&priority=10&";
+      }
+      // Send HTTP POST request
+      debug(serverPath);
+      debug(httpRequestData);
+      int httpResponseCode = http.POST(httpRequestData);
+      if (httpResponseCode > 0) {
+        debug("HTTP Response code: ");
+        debugln(httpResponseCode);
+        String payload = http.getString();
+        debugln(payload);
+      }
+      else {
+        debug("Error code: ");
+        debugln(httpResponseCode);
+      }
+      // Free resources
+      http.end();
+      messageSent = 1;
+    } else {
+      debugln("WiFi Disconnected - reconnect");
+      WiFi.forceSleepWake();
+      WiFi.begin();
+      connectToWifi();
     }
-    lastTime = millis();
+  }
+}
+
+void setupGyroSensor() {
+  Serial.begin(9600);
+  debugln("BIRTH ALARM");
+  debugln();
+  
+  adxl.powerOn();                     // Power on the ADXL345
+
+  adxl.setRangeSetting(4);            // Give the range settings
+                                      // Accepted values are 2g, 4g, 8g or 16g
+                                      // Higher Values = Wider Measurement Range
+                                      // Lower Values = Greater Sensitivity
+
+  adxl.setSpiBit(0);                  // Configure the device to be in 4 wire SPI mode when set to '0' or 3 wire SPI mode when set to 1
+                                      // Default: Set to 1
+                                      // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library 
+   
+  adxl.setActivityXYZ(1, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
+  adxl.setActivityThreshold(255);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
+ 
+  adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
+  adxl.setInactivityThreshold(50);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
+  adxl.setTimeInactivity(25);         // How many seconds of no activity is inactive?
+
+  adxl.setTapDetectionOnXYZ(0, 0, 0); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
+ 
+  // Set values for what is considered a TAP and what is a DOUBLE TAP (0-255)
+  adxl.setTapThreshold(50);           // 62.5 mg per increment
+  adxl.setTapDuration(15);            // 625 μs per increment
+  adxl.setDoubleTapLatency(80);       // 1.25 ms per increment
+  adxl.setDoubleTapWindow(200);       // 1.25 ms per increment
+ 
+  // Set values for what is considered FREE FALL (0-255)
+  adxl.setFreeFallThreshold(7);       // (5 - 9) recommended - 62.5mg per increment
+  adxl.setFreeFallDuration(30);       // (20 - 70) recommended - 5ms per increment
+ 
+  // Setting all interupts to take place on INT1 pin
+  adxl.setImportantInterruptMapping(1, 1, 1, 1, 1);     // Sets "adxl.setEveryInterruptMapping(single tap, double tap, free fall, activity, inactivity);" 
+                                                        // Accepts only 1 or 2 values for pins INT1 and INT2. This chooses the pin on the ADXL345 to use for Interrupts.
+                                                        // This library may have a problem using INT2 pin. Default to INT1 pin.
+  
+  // Turn on Interrupts for each mode (1 == ON, 0 == OFF)
+  adxl.InactivityINT(0);
+  adxl.ActivityINT(1);
+  adxl.FreeFallINT(0);
+  adxl.doubleTapINT(0);
+  adxl.singleTapINT(0);
+  
+  attachInterrupt(digitalPinToInterrupt(interruptPin), ADXL_ISR, HIGH);
+}
+
+void setup(){
+  setupGyroSensor();
+  setupWifiManager();
+}
+
+/****************** MAIN CODE ******************/
+/*     Accelerometer Readings and Interrupt    */
+void loop(){
+  delay(2500);
+  if(inactive == 1) {
+    debugln("sleep now...");
+    lightSleep();
   }
 
-  /* Display the results (acceleration is measured in m/s^2) */
-  Serial.print("X: "); Serial.print(event.acceleration.x); Serial.print(" ");
-  Serial.print("Y: "); Serial.print(event.acceleration.y); Serial.print(" ");
-  Serial.print("Z: "); Serial.print(event.acceleration.z); Serial.print(" ");Serial.println("m/s^2 ");
-  delay(500);
+  if(inactive == 0) {
+    // restet inactive state
+    if(messageSent == 1) {
+      debugln("*** INACTIVITY ***");
+      //add code here to do when inactivity is sensed
+      inactive = 1;
+      lastTime = millis();
+      messageSent = 0;
+    }
+
+    debugln("*** ACTIVITY ***"); 
+    // Accelerometer Readings
+    int x,y,z;   
+    adxl.readAccel(&x, &y, &z);         // Read the accelerometer values and store them in variables declared above x,y,z
+    debugln(x)
+
+    // send alarm
+    if(x > 100 || x < -100) {
+      sendAlarm("birthalarm");
+    }
+    //add code here to do when activity is sensed
+    checkBattery();
+  }
+}
+
+void lightSleep(){
+  pinMode(interruptPin, INPUT_PULLUP);
+  WiFi.mode(WIFI_OFF);
+  delay(100);
+  wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);
+  wifi_fpm_open();
+  gpio_pin_wakeup_enable(interruptPin, GPIO_PIN_INTR_HILEVEL);
+  wifi_fpm_do_sleep(0xFFFFFFF);
+  delay(100);
+}
+
+void ICACHE_RAM_ATTR ADXL_ISR() {
+  inactive = 0;
+}
+
+//callback notifying us of the need to save config for wifi
+void saveConfigCallback () {
+  debugln("Should save config");
+  shouldSaveConfig = true;
+}
+
+void checkBattery() {
+  int rawValue = analogRead(batteryPin);
+  float voltage = 4.2 * (rawValue/ 1023.0);  // calculate voltage: ref v / 10bit 
+  debugln("Current battery voltage: " + String(voltage) + "V");
+
+  if (voltage < lowVoltageThreshold) {
+    debugln("send warning for low voltage!");
+    sendAlarm("lowbattery");
+  }
+}
+
+void setupWifiManager() {
+  //read configuration from FS json
+  debugln("mounting FS...");
+
+  if (SPIFFS.begin()) {
+    debugln("mounted file system");
+    if (SPIFFS.exists("/config.json")) {
+      //file exists, reading and loading
+      debugln("reading config file");
+      File configFile = SPIFFS.open("/config.json", "r");
+      if (configFile) {
+        debugln("opened config file");
+        size_t size = configFile.size();
+        // Allocate a buffer to store contents of the file.
+        std::unique_ptr<char[]> buf(new char[size]);
+
+        configFile.readBytes(buf.get(), size);
+        DynamicJsonBuffer jsonBuffer;
+        JsonObject& json = jsonBuffer.parseObject(buf.get());
+        json.printTo(Serial);
+        if (json.success()) {
+          debugln("\nparsed json");
+          strcpy(output, json["output"]);
+          strcpy(pushToken, json["pushToken"]);
+          strcpy(horseName, json["horseName"]);
+        } else {
+          debugln("failed to load json config");
+        }
+      }
+    }
+  } else {
+    debugln("failed to mount FS");
+  }
+  //end read
+  WiFiManagerParameter custom_output("output", "output", output, 2);
+  WiFiManagerParameter custom_pushToken("pushToken", "Push token", pushToken, 20);
+  WiFiManagerParameter custom_horseName("horseName", "Horse name", horseName, 40);
+
+  // WiFiManager
+  // Local intialization. Once its business is done, there is no need to keep it around
+  WiFiManager wifiManager;
+
+  //set config save notify callback
+  wifiManager.setSaveConfigCallback(saveConfigCallback);
+  
+  // set custom ip for portal
+  //wifiManager.setAPConfig(IPAddress(10,0,1,1), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
+
+  //add all your parameters here
+  wifiManager.addParameter(&custom_output);
+  wifiManager.addParameter(&custom_pushToken);
+  wifiManager.addParameter(&custom_horseName);
+  
+  // Uncomment and run it once, if you want to erase all the stored information
+  //wifiManager.resetSettings();
+
+  //set minimu quality of signal so it ignores AP's under that quality
+  //defaults to 8%
+  //wifiManager.setMinimumSignalQuality();
+  
+  //sets timeout until configuration portal gets turned off
+  //useful to make it all retry or go to sleep
+  //in seconds
+  //wifiManager.setTimeout(120);
+
+  // fetches ssid and pass from eeprom and tries to connect
+  // if it does not connect it starts an access point with the specified name
+  // here  "AutoConnectAP"
+  // and goes into a blocking loop awaiting configuration
+  wifiManager.autoConnect("AutoConnectAP");
+  // or use this for auto generated name ESP + ChipID
+  //wifiManager.autoConnect();
+  
+  // if you get here you have connected to the WiFi
+  debugln("Connected.");
+  
+  strcpy(output, custom_output.getValue());
+  strcpy(pushToken, custom_pushToken.getValue());
+  strcpy(horseName, custom_horseName.getValue());
+
+  //save the custom parameters to FS
+  if (shouldSaveConfig) {
+    debugln("saving config");
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& json = jsonBuffer.createObject();
+    json["output"] = output;
+    json["pushToken"] = pushToken;
+    json["horseName"] = horseName;
+
+    File configFile = SPIFFS.open("/config.json", "w");
+    if (!configFile) {
+      debugln("failed to open config file for writing");
+    }
+
+    json.printTo(Serial);
+    json.printTo(configFile);
+    configFile.close();
+    //end save
+  }
+  
+  server.begin();
 }
