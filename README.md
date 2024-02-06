@@ -10,6 +10,7 @@ Android and iOS.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
 
+![birth alarm device comparison between v1 and v2](content/preview.jpg?raw=true "Comparison between v1 and v2")
 
 ## Tech Stack
 
