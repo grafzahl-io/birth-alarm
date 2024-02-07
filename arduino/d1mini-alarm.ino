@@ -68,6 +68,8 @@ unsigned long lastTime = 0;
 unsigned long timerDelay = 2500;
 
 int messageSent = 0;
+int activeCylces = 0;
+int sleepAfterXActiveCycles = 10;
 
 void ADXL_ISR();
 
@@ -135,6 +137,8 @@ void sendAlarm(String alarmType) {
       // Free resources
       http.end();
       messageSent = 1;
+      // clear active cylcles
+      activeCylces = 0;
     } else {
       debugln("WiFi Disconnected - reconnect");
       WiFi.forceSleepWake();
@@ -210,12 +214,14 @@ void loop(){
 
   if(inactive == 0) {
     // restet inactive state
-    if(messageSent == 1) {
+    // or go to sleep if we reached max active cycles
+    if(messageSent == 1 || activeCylces > sleepAfterXActiveCycles) {
       debugln("*** INACTIVITY ***");
       //add code here to do when inactivity is sensed
       inactive = 1;
       lastTime = millis();
       messageSent = 0;
+      activeCylces = 0;
     }
 
     debugln("*** ACTIVITY ***"); 
@@ -225,8 +231,12 @@ void loop(){
     debugln(x)
 
     // send alarm
-    if(x > 100 || x < -100) {
+    if(x > 94 || x < -94) {
+      // send alarm
       sendAlarm("birthalarm");
+    } else {
+      // increment active cylces to prevent hanging active when not reaching thresholds
+      activeCylces = activeCylces + 1;
     }
     //add code here to do when activity is sensed
     checkBattery();
