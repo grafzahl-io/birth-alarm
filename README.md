@@ -36,18 +36,25 @@ using WLAN with simple App notification - so I build it myself.
 The device is mounted on the chin strap of the horse's holster. A gyro sensor is tracking the devices position and triggers an alarm if the horse lies down.
 The push notification is sent to a server, where the registered Apps are notified.
 
+## Roadmap v2
 
-## Roadmap
+- improve sleep mode and add configuration for sensitivity
+  
+- improve case: simpler, more durable, waterproof
+  
+- reset button to reset wifi configuration and settings
+
+## Roadmap v1
 
 - creating a DIY manual for everyone to reproduce the device
 
-- configurable WLAN SSID and Password through Bluetooth
+- ~~configurable WLAN SSID and Password through Bluetooth~~
 
-- smaller battery and smaller device case
+- ~~smaller battery and smaller device case~~
 
-- adding a measure unit to send an warning for low battery
+- ~~adding a measure unit to send an warning for low battery~~
 
-- replacing the hardware components with smaller ones
+- ~~replacing the hardware components with smaller ones~~
 
 
 ## Feedback
