@@ -161,10 +161,10 @@ void setupGyroSensor() {
                                       // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library 
    
   adxl.setActivityXYZ(1, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setActivityThreshold(25);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
+  adxl.setActivityThreshold(125);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
  
   adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setInactivityThreshold(50);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
+  adxl.setInactivityThreshold(70);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
   adxl.setTimeInactivity(10);         // How many seconds of no activity is inactive?
 
   adxl.setTapDetectionOnXYZ(0, 0, 0); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
@@ -254,8 +254,6 @@ void lightSleep(){
   wifi_fpm_open();
   gpio_pin_wakeup_enable(interruptPin, GPIO_PIN_INTR_HILEVEL);
   wifi_fpm_do_sleep(0xFFFFFFF);
-  //
-  // ESP.deepSleep(0);
 }
 
 void ICACHE_RAM_ATTR ADXL_ISR() {
