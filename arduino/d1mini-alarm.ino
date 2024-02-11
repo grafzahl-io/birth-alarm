@@ -161,10 +161,10 @@ void setupGyroSensor() {
                                       // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library 
    
   adxl.setActivityXYZ(1, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setActivityThreshold(125);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
+  adxl.setActivityThreshold(65);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
  
   adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setInactivityThreshold(70);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
+  adxl.setInactivityThreshold(20);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
   adxl.setTimeInactivity(10);         // How many seconds of no activity is inactive?
 
   adxl.setTapDetectionOnXYZ(0, 0, 0); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
@@ -176,8 +176,8 @@ void setupGyroSensor() {
   adxl.setDoubleTapWindow(200);       // 1.25 ms per increment
  
   // Set values for what is considered FREE FALL (0-255)
-  adxl.setFreeFallThreshold(7);       // (5 - 9) recommended - 62.5mg per increment
-  adxl.setFreeFallDuration(30);       // (20 - 70) recommended - 5ms per increment
+  adxl.setFreeFallThreshold(2);       // (5 - 9) recommended - 62.5mg per increment
+  adxl.setFreeFallDuration(10);       // (20 - 70) recommended - 5ms per increment
  
   // Setting all interupts to take place on INT1 pin
   adxl.setImportantInterruptMapping(1, 1, 1, 1, 1);     // Sets "adxl.setEveryInterruptMapping(single tap, double tap, free fall, activity, inactivity);" 
@@ -187,7 +187,7 @@ void setupGyroSensor() {
   // Turn on Interrupts for each mode (1 == ON, 0 == OFF)
   adxl.InactivityINT(1);
   adxl.ActivityINT(1);
-  adxl.FreeFallINT(0);
+  adxl.FreeFallINT(1);
   adxl.doubleTapINT(0);
   adxl.singleTapINT(0);
   
@@ -259,7 +259,11 @@ void lightSleep(){
 void ICACHE_RAM_ATTR ADXL_ISR() {
   byte interrupts = adxl.getInterruptSource();
   if(adxl.triggered(interrupts, ADXL345_ACTIVITY)) {
-    debugln("wake!")
+    debugln("wake! activity")
+    inactive = 0;
+  }
+  if(adxl.triggered(interrupts, ADXL345_FREE_FALL)) {
+    debugln("wake! free fall")
     inactive = 0;
   }
 }
