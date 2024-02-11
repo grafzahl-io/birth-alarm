@@ -44,7 +44,7 @@ ADXL345 adxl = ADXL345();             // use adxl with i2c
 
 int interruptPin = D5;                // Setup pin 2 to be the interrupt pin (d0 for most esp Boards)
 int actInt = 0;
-int inactive = 1;
+int inactive = 0;
 int batteryPin = A0;
 float lowVoltageThreshold = 3.73;     // est. 20% remaining battery cap.
 
@@ -149,10 +149,6 @@ void sendAlarm(String alarmType) {
 }
 
 void setupGyroSensor() {
-  Serial.begin(9600);
-  debugln("BIRTH ALARM");
-  debugln();
-  
   adxl.powerOn();                     // Power on the ADXL345
 
   adxl.setRangeSetting(4);            // Give the range settings
@@ -165,11 +161,11 @@ void setupGyroSensor() {
                                       // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library 
    
   adxl.setActivityXYZ(1, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setActivityThreshold(255);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
+  adxl.setActivityThreshold(25);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
  
   adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
   adxl.setInactivityThreshold(50);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
-  adxl.setTimeInactivity(25);         // How many seconds of no activity is inactive?
+  adxl.setTimeInactivity(10);         // How many seconds of no activity is inactive?
 
   adxl.setTapDetectionOnXYZ(0, 0, 0); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
  
@@ -189,30 +185,38 @@ void setupGyroSensor() {
                                                         // This library may have a problem using INT2 pin. Default to INT1 pin.
   
   // Turn on Interrupts for each mode (1 == ON, 0 == OFF)
-  adxl.InactivityINT(0);
+  adxl.InactivityINT(1);
   adxl.ActivityINT(1);
   adxl.FreeFallINT(0);
   adxl.doubleTapINT(0);
   adxl.singleTapINT(0);
   
-  attachInterrupt(digitalPinToInterrupt(interruptPin), ADXL_ISR, HIGH);
+  attachInterrupt(digitalPinToInterrupt(interruptPin), ADXL_ISR, RISING);
 }
 
 void setup(){
-  setupGyroSensor();
+  Serial.begin(9600);
+  delay(1000);
+  debugln("------------");
+  debugln("BIRTH ALARM");
+  debugln("------------");
+
   setupWifiManager();
+  delay(2500);
+  setupGyroSensor();
 }
 
 /****************** MAIN CODE ******************/
 /*     Accelerometer Readings and Interrupt    */
-void loop(){
-  delay(2500);
+void loop() {
   if(inactive == 1) {
     debugln("sleep now...");
+    inactive = 3; // sleep mode
     lightSleep();
   }
 
   if(inactive == 0) {
+    delay(2500);
     // restet inactive state
     // or go to sleep if we reached max active cycles
     if(messageSent == 1 || activeCylces > sleepAfterXActiveCycles) {
@@ -244,18 +248,22 @@ void loop(){
 }
 
 void lightSleep(){
-  pinMode(interruptPin, INPUT_PULLUP);
   WiFi.mode(WIFI_OFF);
   delay(100);
   wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);
   wifi_fpm_open();
   gpio_pin_wakeup_enable(interruptPin, GPIO_PIN_INTR_HILEVEL);
   wifi_fpm_do_sleep(0xFFFFFFF);
-  delay(100);
+  //
+  // ESP.deepSleep(0);
 }
 
 void ICACHE_RAM_ATTR ADXL_ISR() {
-  inactive = 0;
+  byte interrupts = adxl.getInterruptSource();
+  if(adxl.triggered(interrupts, ADXL345_ACTIVITY)) {
+    debugln("wake!")
+    inactive = 0;
+  }
 }
 
 //callback notifying us of the need to save config for wifi
