@@ -151,6 +151,7 @@ void sendAlarm(String alarmType) {
 void setupGyroSensor() {
   adxl.powerOn();                     // Power on the ADXL345
 
+  adxl.setLowPower(true);             // set low power consumption
   adxl.setRangeSetting(4);            // Give the range settings
                                       // Accepted values are 2g, 4g, 8g or 16g
                                       // Higher Values = Wider Measurement Range
@@ -161,7 +162,7 @@ void setupGyroSensor() {
                                       // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library 
    
   adxl.setActivityXYZ(1, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setActivityThreshold(65);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
+  adxl.setActivityThreshold(145);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
  
   adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
   adxl.setInactivityThreshold(20);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
@@ -187,7 +188,7 @@ void setupGyroSensor() {
   // Turn on Interrupts for each mode (1 == ON, 0 == OFF)
   adxl.InactivityINT(1);
   adxl.ActivityINT(1);
-  adxl.FreeFallINT(1);
+  adxl.FreeFallINT(0);
   adxl.doubleTapINT(0);
   adxl.singleTapINT(0);
   
